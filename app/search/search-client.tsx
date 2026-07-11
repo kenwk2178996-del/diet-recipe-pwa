@@ -37,7 +37,7 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
       // タグ絞り込み: 選択タグをすべて満たす(材料由来のカテゴリも一致扱い)
       if (selTags.length && !selTags.every((t) => effective.includes(t))) return false;
 
-      // キーワード: レシピ名/説明/投稿者/材料名/カテゴリ名のいずれかに一致
+      // キーワード: レシピ名/説明/投稿��材料名/カテゴリ名のいずれかに一致
       if (term) {
         const ingredientText = (r.ingredients ?? []).map((i: any) => i.name).join(" ");
         const hay = [
