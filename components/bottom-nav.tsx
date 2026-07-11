@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Search, PlusCircle, Settings } from "lucide-react";
+import { Home, Search, PlusCircle, CalendarDays, Settings } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 export function BottomNav() {
@@ -11,6 +11,7 @@ export function BottomNav() {
     { href: "/", icon: Home, label: "ホーム" },
     { href: "/search", icon: Search, label: "検索" },
     { href: "/add", icon: PlusCircle, label: "追加" },
+    { href: "/calendar", icon: CalendarDays, label: "献立" },
     { href: "/settings", icon: Settings, label: "設定" },
   ];
   return (
