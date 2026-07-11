@@ -68,5 +68,7 @@ function mapRecipe(n: any): AiRecipe {
       source: nut.calories ? "page" : "ai_estimated",
     },
     suggested_tags: [],
+    ai_estimated_fields: nut.calories ? [] : ["nutrition.kcal", "nutrition.protein_g", "nutrition.fat_g", "nutrition.carb_g"],
+    analysis_confidence: 0.9,
   };
 }

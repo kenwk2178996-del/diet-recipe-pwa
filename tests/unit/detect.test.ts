@@ -5,6 +5,7 @@ describe("detectUrlKind", () => {
   it("instagram post/reel", () => {
     expect(detectUrlKind("https://www.instagram.com/p/ABC/")).toBe("instagram");
     expect(detectUrlKind("https://instagram.com/reel/XYZ/")).toBe("instagram");
+    expect(detectUrlKind("https://www.instagram.com/tv/TV123/?utm_source=ig_web_copy_link")).toBe("instagram");
   });
   it("tiktok", () => expect(detectUrlKind("https://www.tiktok.com/@u/video/123")).toBe("tiktok"));
   it("youtube long + short", () => {

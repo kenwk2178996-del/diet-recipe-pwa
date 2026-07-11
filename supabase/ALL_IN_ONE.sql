@@ -34,6 +34,14 @@ create table if not exists public.recipes (
   source_site text,
   source_sns text,
   source_author text,
+  original_source_url text,
+  normalized_source_url text,
+  instagram_post_id text,
+  import_method text,
+  source_fetched_at timestamptz,
+  ai_estimated_fields text[] not null default '{}',
+  analysis_confidence numeric check (analysis_confidence is null or (analysis_confidence >= 0 and analysis_confidence <= 1)),
+  source_raw_text text,
   is_favorite boolean not null default false,
   rating int check (rating between 0 and 5),
   memo text,
@@ -46,6 +54,12 @@ create table if not exists public.recipes (
 create index if not exists recipes_user_idx on public.recipes(user_id);
 create index if not exists recipes_fav_idx on public.recipes(user_id, is_favorite);
 create index if not exists recipes_created_idx on public.recipes(user_id, created_at desc);
+create index if not exists recipes_user_instagram_post_idx
+  on public.recipes(user_id, instagram_post_id)
+  where instagram_post_id is not null;
+create index if not exists recipes_user_normalized_source_idx
+  on public.recipes(user_id, normalized_source_url)
+  where normalized_source_url is not null;
 
 -- ingredients ------------------------------------------------
 create table if not exists public.ingredients (

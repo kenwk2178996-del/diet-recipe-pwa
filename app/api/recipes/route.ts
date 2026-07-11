@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { saveRecipe } from "@/lib/repository";
+import { findDuplicateRecipe, saveRecipe } from "@/lib/repository";
 import { AiRecipeSchema } from "@/lib/types";
 import { validateAndNormalize } from "@/lib/validate";
 import { detectTags } from "@/lib/autotag";
@@ -67,6 +67,14 @@ export async function POST(req: Request) {
   mergedTagIds = [...new Set(mergedTagIds)];
 
   try {
+    const duplicate = await findDuplicateRecipe(sb, user.id, body.source);
+    if (duplicate && body.duplicateAction !== "save_as_new") {
+      return NextResponse.json({
+        error: "同じInstagram投稿から作成したレシピが既にあります。",
+        duplicate,
+        actions: ["open_existing", "update_existing", "save_as_new"],
+      }, { status: 409 });
+    }
     const id = await saveRecipe(sb, {
       recipe, userId: user.id, status: body.status === "published" ? "published" : "draft",
       source: body.source, mainImageUrl: body.mainImageUrl ?? null,

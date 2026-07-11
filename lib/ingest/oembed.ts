@@ -10,16 +10,10 @@ async function fetchJson(url: string): Promise<any | null> {
   } catch { return null; }
 }
 
-// Instagram / TikTok / YouTube oEmbed (spec §6). Falls back to null gracefully.
-export async function fetchOEmbed(kind: "instagram" | "tiktok" | "youtube", url: string): Promise<OEmbed | null> {
+// TikTok / YouTube oEmbed (spec §6). Instagram uses lib/ingest/instagram.ts.
+export async function fetchOEmbed(kind: "tiktok" | "youtube", url: string): Promise<OEmbed | null> {
   if (kind === "tiktok") return fetchJson(`https://www.tiktok.com/oembed?url=${encodeURIComponent(url)}`);
   if (kind === "youtube") return fetchJson(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
-  // Instagram oEmbed officially requires an app token; try public endpoint, else null.
-  if (kind === "instagram") {
-    const token = process.env.INSTAGRAM_OEMBED_TOKEN;
-    if (token) return fetchJson(`https://graph.facebook.com/v19.0/instagram_oembed?url=${encodeURIComponent(url)}&access_token=${token}`);
-    return null;
-  }
   return null;
 }
 

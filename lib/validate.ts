@@ -43,6 +43,18 @@ export function validateAndNormalize(input: AiRecipe): ValidationResult {
     const v = (r.nutrition as any)[k];
     if (v != null && (typeof v !== "number" || v < 0)) { (r.nutrition as any)[k] = null; warnings.push(`${label}の値が不正なため無視しました。`); }
   }
+  if (r.nutrition?.source === "ai_estimated") {
+    const estimated = new Set(r.ai_estimated_fields ?? []);
+    for (const key of ["kcal", "protein_g", "fat_g", "carb_g"] as const) {
+      if (r.nutrition[key] != null) estimated.add(`nutrition.${key}`);
+    }
+    r.ai_estimated_fields = [...estimated];
+  }
+  if (r.analysis_confidence == null) {
+    const hasIngredients = r.ingredients.length > 0;
+    const hasSteps = r.steps.length > 0;
+    r.analysis_confidence = hasIngredients && hasSteps ? 0.75 : hasIngredients || hasSteps ? 0.45 : 0.2;
+  }
 
   if (r.ingredients.length === 0) warnings.push("材料が抽出できませんでした。手動で追加してください。");
   if (r.steps.length === 0) warnings.push("手順が抽出できませんでした。手動で追加してください。");

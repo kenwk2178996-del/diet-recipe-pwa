@@ -30,7 +30,7 @@ export async function POST(req: Request) {
   const files = form.getAll("images").filter((f): f is File => f instanceof File);
 
   const images = [];
-  for (const f of files.slice(0, 4)) {
+  for (const f of files.slice(0, 8)) {
     const buf = Buffer.from(await f.arrayBuffer());
     const { base64 } = await normalizeImage(buf, f.type);
     images.push({ mediaType: "image/jpeg" as const, base64 });
@@ -45,7 +45,12 @@ export async function POST(req: Request) {
       user_id: user.id, type: "structure", input_kind: images.length ? "image" : "text",
       tokens_in: tokensIn, tokens_out: tokensOut, success: true,
     });
-    return NextResponse.json({ recipe: normalized, warnings });
+    return NextResponse.json({
+      recipe: normalized,
+      warnings,
+      aiEstimatedFields: normalized.ai_estimated_fields ?? [],
+      analysisConfidence: normalized.analysis_confidence ?? null,
+    });
   } catch (e: any) {
     await admin.from("ai_logs").insert({
       user_id: user.id, type: "structure", input_kind: images.length ? "image" : "text",

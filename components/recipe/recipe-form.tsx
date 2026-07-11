@@ -10,13 +10,27 @@ import { ChevronUp, ChevronDown, Trash2, Plus } from "lucide-react";
 interface Props {
   initial: AiRecipe;
   warnings?: string[];
-  source?: { url?: string | null; site?: string | null; sns?: string | null; author?: string | null };
+  source?: {
+    url?: string | null;
+    originalUrl?: string | null;
+    normalizedUrl?: string | null;
+    site?: string | null;
+    sns?: string | null;
+    author?: string | null;
+    instagramPostId?: string | null;
+    importMethod?: string | null;
+    fetchedAt?: string | null;
+    sourceRawText?: string | null;
+    aiEstimatedFields?: string[];
+    analysisConfidence?: number | null;
+  };
   mainImageUrl?: string | null;
   allTags?: { id: string; name: string; category: string | null }[];
   recipeId?: string; // when editing existing
+  duplicateAction?: "save_as_new";
 }
 
-export function RecipeForm({ initial, warnings = [], source, mainImageUrl, allTags = [], recipeId }: Props) {
+export function RecipeForm({ initial, warnings = [], source, mainImageUrl, allTags = [], recipeId, duplicateAction }: Props) {
   const [r, setR] = useState<AiRecipe>(initial);
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -35,10 +49,25 @@ export function RecipeForm({ initial, warnings = [], source, mainImageUrl, allTa
     setBusy(true); setErr(null);
     try {
       const suggestedIds = allTags.filter((t) => r.suggested_tags?.includes(t.name)).map((t) => t.id);
-      const body = { recipe: r, status, source, mainImageUrl, tagIds: [...new Set([...tagIds, ...suggestedIds])], nutritionSource: r.nutrition?.source };
+      const body = {
+        recipe: r,
+        status,
+        source: source ? {
+          ...source,
+          aiEstimatedFields: source.aiEstimatedFields ?? r.ai_estimated_fields ?? [],
+          analysisConfidence: source.analysisConfidence ?? r.analysis_confidence ?? null,
+        } : undefined,
+        mainImageUrl,
+        tagIds: [...new Set([...tagIds, ...suggestedIds])],
+        nutritionSource: r.nutrition?.source,
+        duplicateAction,
+      };
       const url = recipeId ? `/api/recipes/${recipeId}` : "/api/recipes";
       const res = await fetch(url, { method: recipeId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
+      if (res.status === 409 && j.duplicate?.id) {
+        throw new Error(`同じ投稿のレシピ「${j.duplicate.title}」が既にあります。既存レシピを開くか、別レシピとして保存を選んでください。`);
+      }
       if (!res.ok) throw new Error(j.error || "保存に失敗しました");
       window.location.href = recipeId ? `/recipes/${recipeId}` : `/recipes/${j.id}`;
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
