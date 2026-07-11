@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { RecipeCard } from "@/components/recipe/recipe-card";
+import { effectiveTagNames } from "@/lib/autotag";
 import { Grid, List, SlidersHorizontal } from "lucide-react";
 
 export function SearchClient({ allTags }: { allTags: any[] }) {
@@ -17,21 +18,32 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
   const [results, setResults] = useState<any[]>([]);
 
   const run = useCallback(async () => {
+    // キーワードは材料・カテゴリも対象にするため、サーバでは絞らず取得してクライアントで判定。
     const p = new URLSearchParams();
-    if (q) p.set("q", q);
+    p.set("size", "50");
     if (favorite) p.set("favorite", "1");
     if (minRating) p.set("minRating", String(minRating));
     if (maxTime) p.set("maxTime", maxTime);
     const res = await fetch(`/api/recipes?${p.toString()}`).then((r) => r.json());
-    let list = res.recipes ?? [];
-    // Client-side numeric + tag refinement (nutrition/tags are joined).
-    list = list.filter((r: any) => {
+    const term = q.trim().toLowerCase();
+
+    const list = (res.recipes ?? []).filter((r: any) => {
       const n = Array.isArray(r.nutrition) ? r.nutrition[0] : r.nutrition;
       if (maxKcal && (n?.kcal == null || n.kcal > +maxKcal)) return false;
       if (minProtein && (n?.protein_g == null || n.protein_g < +minProtein)) return false;
-      if (selTags.length) {
-        const names = (r.recipe_tags ?? []).map((rt: any) => rt.tags?.name);
-        if (!selTags.every((t) => names.includes(t))) return false;
+
+      const effective = effectiveTagNames(r); // 付与済み ∪ 材料/時間/栄養からの自動判定
+
+      // タグ絞り込み: 選択タグをすべて満たす(材料由来のカテゴリも一致扱い)
+      if (selTags.length && !selTags.every((t) => effective.includes(t))) return false;
+
+      // キーワード: レシピ名/説明/投稿者/材料名/カテゴリ名のいずれかに一致
+      if (term) {
+        const ingredientText = (r.ingredients ?? []).map((i: any) => i.name).join(" ");
+        const hay = [
+          r.title, r.description, r.source_author, ingredientText, effective.join(" "),
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!hay.includes(term)) return false;
       }
       return true;
     });
