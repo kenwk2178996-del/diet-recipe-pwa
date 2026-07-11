@@ -1,0 +1,30 @@
+import { test, expect } from "@playwright/test";
+// Enable by copying to authenticated.spec.ts with a seeded project (see README).
+const EMAIL = process.env.TEST_EMAIL!;
+const PASSWORD = process.env.TEST_PASSWORD!;
+
+test.beforeEach(async ({ page }) => {
+  await page.goto("/login");
+  await page.getByPlaceholder("メールアドレス").fill(EMAIL);
+  await page.getByPlaceholder("パスワード").fill(PASSWORD);
+  await page.getByRole("button", { name: "ログイン" }).click();
+  await page.waitForURL("/");
+});
+
+test("manual recipe CRUD (§11.10,11)", async ({ page }) => {
+  await page.goto("/add");
+  await page.getByText("手動").click();
+  await page.getByPlaceholder("レシピ名").fill("テスト鶏むね");
+  await page.getByRole("button", { name: "保存する" }).click();
+  await expect(page.getByRole("heading", { name: "テスト鶏むね" })).toBeVisible();
+});
+
+test("servings converter halves amounts (§11.12)", async ({ page }) => {
+  // ... open a 2-serving recipe, click −, assert amounts halve
+});
+
+test("composite search (§11.13)", async ({ page }) => {
+  await page.goto("/search");
+  await page.getByPlaceholder(/検索/).fill("鶏");
+  // assert filtered results
+});

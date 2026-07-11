@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+html, body { background: #FBF9F3; color: #3A3A34; }
+* { -webkit-tap-highlight-color: transparent; }
+
+.skeleton { background: linear-gradient(90deg,#EFE7D8 25%,#F6F1E7 37%,#EFE7D8 63%); background-size:400% 100%; animation: shimmer 1.3s ease infinite; }
+@keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:0 0} }
