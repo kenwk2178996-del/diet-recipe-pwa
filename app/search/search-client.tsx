@@ -1,9 +1,16 @@
 "use client";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { RecipeCard } from "@/components/recipe/recipe-card";
 import { effectiveTagNames } from "@/lib/autotag";
+import {
+  groupSavedListRecipes,
+  SAVED_LIST_CATEGORIES,
+  type SavedListCategoryId,
+} from "@/lib/recipe-categories";
 import { Grid, List, SlidersHorizontal } from "lucide-react";
+
+type ActiveCategory = "all" | SavedListCategoryId;
 
 export function SearchClient({ allTags }: { allTags: any[] }) {
   const [q, setQ] = useState("");
@@ -16,6 +23,7 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
   const [layout, setLayout] = useState<"grid" | "list">("grid");
   const [showFilters, setShowFilters] = useState(false);
   const [results, setResults] = useState<any[]>([]);
+  const [activeCategory, setActiveCategory] = useState<ActiveCategory>("all");
 
   const run = useCallback(async () => {
     // キーワードは材料・カテゴリも対象にするため、サーバでは絞らず取得してクライアントで判定。
@@ -37,7 +45,7 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
       // タグ絞り込み: 選択タグをすべて満たす(材料由来のカテゴリも一致扱い)
       if (selTags.length && !selTags.every((t) => effective.includes(t))) return false;
 
-      // キーワード: レシピ名/説明/投稿��材料名/カテゴリ名のいずれかに一致
+      // キーワード: レシピ名/説明/投稿者/材料名/カテゴリ名のいずれかに一致
       if (term) {
         const ingredientText = (r.ingredients ?? []).map((i: any) => i.name).join(" ");
         const hay = [
@@ -51,6 +59,16 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
   }, [q, favorite, minRating, maxKcal, minProtein, maxTime, selTags]);
 
   useEffect(() => { const t = setTimeout(run, 250); return () => clearTimeout(t); }, [run]);
+
+  const categoryGroups = useMemo(() => groupSavedListRecipes(results), [results]);
+  const categoryCounts = useMemo(() => {
+    return new Map(categoryGroups.map((group) => [group.id, group.recipes.length]));
+  }, [categoryGroups]);
+  const visibleGroups = useMemo(() => {
+    if (activeCategory === "all") return categoryGroups.filter((group) => group.recipes.length > 0);
+    return categoryGroups.filter((group) => group.id === activeCategory);
+  }, [activeCategory, categoryGroups]);
+  const cardsClass = layout === "grid" ? "grid grid-cols-2 gap-3 sm:grid-cols-3" : "space-y-2";
 
   return (
     <div className="space-y-3">
@@ -75,10 +93,65 @@ export function SearchClient({ allTags }: { allTags: any[] }) {
         </div>
       )}
 
-      <p className="text-xs text-ink/50">{results.length}件</p>
-      <div className={layout === "grid" ? "grid grid-cols-2 gap-3 sm:grid-cols-3" : "space-y-2"}>
-        {results.map((r) => <RecipeCard key={r.id} r={r} layout={layout} />)}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-ink/50">{results.length}件</p>
+          <p className="text-[11px] text-ink/45">目次で分類</p>
+        </div>
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
+          {[
+            { id: "all" as const, label: "すべて", count: results.length },
+            ...SAVED_LIST_CATEGORIES.map((category) => ({
+              id: category.id,
+              label: category.label,
+              count: categoryCounts.get(category.id) ?? 0,
+            })),
+          ].map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              aria-pressed={activeCategory === category.id}
+              onClick={() => setActiveCategory(category.id)}
+              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                activeCategory === category.id
+                  ? "border-sage-dark bg-sage-dark text-white"
+                  : "border-beige bg-white text-ink"
+              }`}
+            >
+              {category.label}
+              <span className={`ml-1 ${activeCategory === category.id ? "text-white/75" : "text-ink/45"}`}>
+                {category.count}
+              </span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {results.length === 0 ? (
+        <div className="rounded-xl border border-beige bg-white p-4 text-sm text-ink/60">
+          条件に合う保存レシピがありません。
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {visibleGroups.map((group) => (
+            <section key={group.id} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-ink">{group.label}</h2>
+                <span className="text-xs text-ink/45">{group.recipes.length}件</span>
+              </div>
+              {group.recipes.length > 0 ? (
+                <div className={cardsClass}>
+                  {group.recipes.map((r) => <RecipeCard key={r.id} r={r} layout={layout} />)}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-beige bg-white p-4 text-sm text-ink/60">
+                  この分類の保存レシピはまだありません。
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
