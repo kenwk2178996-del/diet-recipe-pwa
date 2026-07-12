@@ -1,5 +1,5 @@
 import type { UrlKind } from "@/lib/types";
-import { isInstagramUrl } from "./instagram";
+import { isInstagramUrl } from "./instagram-url";
 
 export function detectUrlKind(raw: string): Exclude<UrlKind, "recipe_site" | "unfetchable"> {
   let u: URL;

@@ -1,15 +1,8 @@
 import type { IngestErrorCode } from "@/lib/types";
 import { safeFetch } from "./ssrf";
 import { stripTags } from "./sanitize";
-
-export type InstagramMediaType = "p" | "reel" | "tv";
-
-export interface InstagramUrlInfo {
-  originalUrl: string;
-  normalizedUrl: string;
-  postId: string;
-  mediaType: InstagramMediaType;
-}
+import type { InstagramUrlInfo } from "./instagram-url";
+export { isInstagramUrl, normalizeInstagramUrl } from "./instagram-url";
 
 export interface InstagramOEmbed {
   title?: string;
@@ -37,37 +30,6 @@ export const INSTAGRAM_NEXT_ACTIONS = [
   "動画を追加する",
   "手動入力へ切り替える",
 ];
-
-export function normalizeInstagramUrl(raw: string): InstagramUrlInfo | null {
-  let url: URL;
-  try {
-    url = new URL(raw.trim());
-  } catch {
-    return null;
-  }
-  if (!["http:", "https:"].includes(url.protocol)) return null;
-
-  const host = url.hostname.replace(/^www\./i, "").toLowerCase();
-  if (host !== "instagram.com") return null;
-
-  const match = /^\/(p|reel|tv)\/([^/?#]+)\/?/i.exec(url.pathname);
-  if (!match) return null;
-
-  const mediaType = match[1].toLowerCase() as InstagramMediaType;
-  const postId = decodeURIComponent(match[2]).trim();
-  if (!postId) return null;
-
-  return {
-    originalUrl: raw.trim(),
-    normalizedUrl: `https://www.instagram.com/${mediaType}/${encodeURIComponent(postId)}/`,
-    postId,
-    mediaType,
-  };
-}
-
-export function isInstagramUrl(raw: string): boolean {
-  return normalizeInstagramUrl(raw) != null;
-}
 
 export async function fetchInstagramOEmbed(info: InstagramUrlInfo): Promise<InstagramFetchResult> {
   const version = process.env.META_GRAPH_VERSION || process.env.INSTAGRAM_GRAPH_VERSION || "v23.0";

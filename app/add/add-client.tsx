@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { RecipeForm } from "@/components/recipe/recipe-form";
 import type { AiRecipe, DuplicateRecipe, IngestErrorCode } from "@/lib/types";
+import { SHARE_INSTAGRAM_URL_MISSING_MESSAGE } from "@/lib/ingest/share-target";
 import { AlertCircle, ExternalLink, Image as ImageIcon, Link2, PenLine, RefreshCw, Type, Video } from "lucide-react";
 
 type Tab = "url" | "text" | "image" | "manual";
@@ -64,7 +65,19 @@ interface IngestResponse {
   error?: string;
 }
 
-export function AddClient({ allTags, initialUrl, initialText }: { allTags: any[]; initialUrl: string; initialText: string }) {
+export function AddClient({
+  allTags,
+  initialUrl,
+  initialText,
+  initialShareError = "",
+  fromShareTarget = false,
+}: {
+  allTags: any[];
+  initialUrl: string;
+  initialText: string;
+  initialShareError?: string;
+  fromShareTarget?: boolean;
+}) {
   const [tab, setTab] = useState<Tab>(initialUrl ? "url" : initialText ? "text" : "url");
   const [url, setUrl] = useState(initialUrl);
   const [text, setText] = useState(initialText);
@@ -76,7 +89,7 @@ export function AddClient({ allTags, initialUrl, initialText }: { allTags: any[]
   const [warnings, setWarnings] = useState<string[]>([]);
   const [source, setSource] = useState<SourceMeta | undefined>(undefined);
   const [mainImageUrl, setMainImageUrl] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(shareErrorMessage(initialShareError));
   const [pendingIngest, setPendingIngest] = useState<IngestResponse | null>(null);
   const [updateRecipeId, setUpdateRecipeId] = useState<string | undefined>(undefined);
   const [duplicateAction, setDuplicateAction] = useState<"save_as_new" | undefined>(undefined);
@@ -254,6 +267,12 @@ export function AddClient({ allTags, initialUrl, initialText }: { allTags: any[]
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold">レシピを追加</h1>
+      {fromShareTarget && !initialUrl && (
+        <Card className="space-y-2 border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <p className="font-semibold">Instagram共有を受け取りました</p>
+          <p>URL貼り付け、クリップボードから貼り付け、投稿文の貼り付け、スクリーンショット追加で続けられます。</p>
+        </Card>
+      )}
       <div className="flex gap-1 rounded-xl bg-mist p-1">
         {tabs.map(([t, label, Icon]) => (
           <button key={t} onClick={() => setTab(t)} className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg py-2 text-[11px] ${tab === t ? "bg-white text-sage-dark shadow-sm" : "text-ink/50"}`}>
@@ -285,7 +304,11 @@ export function AddClient({ allTags, initialUrl, initialText }: { allTags: any[]
       {tab === "manual" && (
         <RecipeForm initial={EMPTY} allTags={allTags} />
       )}
-      {err && <p className="text-xs text-red-600">{err}</p>}
+      {err && (
+        <Card className="border-red-200 bg-red-50 p-3 text-xs text-red-700">
+          {err}
+        </Card>
+      )}
     </div>
   );
 }
@@ -429,6 +452,11 @@ function errorLabel(code?: IngestErrorCode | null): string {
     case "temporary_instagram_error": return "Instagram側の一時的なエラーです";
     default: return "投稿情報を取得できません";
   }
+}
+
+function shareErrorMessage(code: string): string | null {
+  if (code === "instagram_url_missing") return SHARE_INSTAGRAM_URL_MISSING_MESSAGE;
+  return null;
 }
 
 async function extractVideoFrames(videoFiles: File[], maxFrames: number): Promise<File[]> {

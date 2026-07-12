@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { extractFirstHttpUrlFromShare, extractInstagramUrlFromShare } from "@/lib/ingest/share-target";
 // iOS Share-Target fallback (spec §6): detect a recipe URL on the clipboard.
 export function ClipboardWatcher() {
   const [url, setUrl] = useState<string | null>(null);
@@ -10,7 +11,12 @@ export function ClipboardWatcher() {
       try {
         if (!navigator.clipboard?.readText) return;
         const t = (await navigator.clipboard.readText()).trim();
-        if (/^https?:\/\/\S+$/.test(t)) setUrl(t);
+        const instagram = extractInstagramUrlFromShare({ text: t, url: t });
+        if (instagram) setUrl(instagram.normalizedUrl);
+        else {
+          const firstUrl = extractFirstHttpUrlFromShare({ text: t, url: t });
+          if (firstUrl) setUrl(firstUrl);
+        }
       } catch { /* permission denied — silent */ }
     };
     const onFocus = () => check();
