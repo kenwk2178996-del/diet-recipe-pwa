@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { MEAL_TYPES } from "@/lib/nutrition";
 import { Input } from "@/components/ui/input";
+import { RecipeImageFallback } from "@/components/recipe/recipe-image-fallback";
 
 function iso(d: Date) { return d.toISOString().slice(0, 10); }
 function startOfWeek(base: Date) { const d = new Date(base); const day = (d.getDay() + 6) % 7; d.setDate(d.getDate() - day); d.setHours(0,0,0,0); return d; }
@@ -91,7 +92,11 @@ export function CalendarClient({ recipes }: { recipes: any[] }) {
               {filtered.length === 0 && <p className="py-6 text-center text-xs text-ink/50">レシピがありません。先に保存してください。</p>}
               {filtered.map((r) => (
                 <button key={r.id} onClick={() => add(r.id)} className="flex w-full items-center gap-2 border-b border-beige py-2 text-left">
-                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-beige">{r.main_image_url && <img src={r.main_image_url} alt="" className="h-full w-full object-cover" />}</div>
+                  <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-beige">
+                    {r.main_image_url
+                      ? <img src={r.main_image_url} alt="" className="h-full w-full object-cover" />
+                      : <RecipeImageFallback title={r.title} compact />}
+                  </div>
                   <span className="min-w-0 flex-1 truncate text-sm">{r.title}</span>
                 </button>
               ))}

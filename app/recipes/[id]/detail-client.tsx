@@ -6,6 +6,7 @@ import { Heart, Star, Trash2, Pencil, Copy, ChefHat } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NutritionBadge } from "@/components/ui/nutrition-badge";
+import { RecipeImageFallback } from "@/components/recipe/recipe-image-fallback";
 import { scaleAmount } from "@/lib/utils/scale";
 
 export function DetailClient({ recipe }: { recipe: any }) {
@@ -16,7 +17,10 @@ export function DetailClient({ recipe }: { recipe: any }) {
   const [memo, setMemo] = useState(recipe.memo ?? "");
   const [cooked, setCooked] = useState(recipe.cooked_count ?? 0);
   const [servings, setServings] = useState(recipe.servings || 1);
+  const [estimatingNutrition, setEstimatingNutrition] = useState(false);
+  const [nutritionError, setNutritionError] = useState<string | null>(null);
   const base = recipe.servings || 1;
+  const nutritionMissing = !nut || [nut.kcal, nut.protein_g, nut.fat_g, nut.carb_g].some((v) => v == null);
 
   async function patch(body: any) {
     await fetch(`/api/recipes/${recipe.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -39,11 +43,27 @@ export function DetailClient({ recipe }: { recipe: any }) {
     const j = await fetch("/api/recipes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
     if (j.id) router.push(`/recipes/${j.id}/edit`);
   }
+  async function estimateNutrition() {
+    setEstimatingNutrition(true);
+    setNutritionError(null);
+    try {
+      const res = await fetch(`/api/recipes/${recipe.id}/nutrition/estimate`, { method: "POST" });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "栄養の推定に失敗しました");
+      router.refresh();
+    } catch (e: any) {
+      setNutritionError(e.message);
+    } finally {
+      setEstimatingNutrition(false);
+    }
+  }
 
   return (
-    <div className="space-y-4 pb-8">
+      <div className="space-y-4 pb-8">
       <div className="relative -mx-4 aspect-[16/10] bg-beige">
-        {recipe.main_image_url && <img src={recipe.main_image_url} alt="" className="h-full w-full object-cover" />}
+        {recipe.main_image_url
+          ? <img src={recipe.main_image_url} alt="" className="h-full w-full object-cover" />
+          : <RecipeImageFallback title={recipe.title} />}
       </div>
       <div className="flex items-start justify-between gap-2">
         <h1 className="text-xl font-bold">{recipe.title}</h1>
@@ -54,6 +74,15 @@ export function DetailClient({ recipe }: { recipe: any }) {
       {recipe.source_url && <a href={recipe.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-sage-dark underline">元の投稿を見る{recipe.source_author ? ` (@${recipe.source_author})` : ""}</a>}
 
       <NutritionBadge kcal={nut?.kcal} p={nut?.protein_g} f={nut?.fat_g} c={nut?.carb_g} estimated={nut?.source === "ai_estimated"} />
+      {nutritionMissing && (
+        <Card className="space-y-2 border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          <p>栄養が未算出、または一部未入力です。材料と作り方からAIで概算できます。</p>
+          <Button variant="outline" className="w-full bg-white" disabled={estimatingNutrition || recipe.ingredients.length === 0} onClick={estimateNutrition}>
+            {estimatingNutrition ? "栄養を推定中..." : "AIで栄養を補う"}
+          </Button>
+          {nutritionError && <p className="text-red-600">{nutritionError}</p>}
+        </Card>
+      )}
 
       <div className="flex items-center gap-1">
         {[1, 2, 3, 4, 5].map((n) => (

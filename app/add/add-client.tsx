@@ -7,6 +7,12 @@ import { Card } from "@/components/ui/card";
 import { RecipeForm } from "@/components/recipe/recipe-form";
 import type { AiRecipe, DuplicateRecipe, IngestErrorCode } from "@/lib/types";
 import { SHARE_INSTAGRAM_URL_MISSING_MESSAGE } from "@/lib/ingest/share-target";
+import { getBrowserSupabase } from "@/lib/supabase/browser";
+import {
+  buildNutritionEstimationText,
+  mergeNutritionEstimate,
+  needsNutritionEstimate,
+} from "@/lib/nutrition-estimate";
 import { AlertCircle, ExternalLink, Image as ImageIcon, Link2, PenLine, RefreshCw, Type, Video } from "lucide-react";
 
 type Tab = "url" | "text" | "image" | "manual";
@@ -132,6 +138,18 @@ export function AddClient({
     setDuplicateAction(opts.saveAsNew ? "save_as_new" : undefined);
 
     if (ing.structured) {
+      if (needsNutritionEstimate(ing.structured)) {
+        setStatus("ページにない栄養をAIで推定しています...");
+        await runAi({
+          text: buildNutritionEstimationText(ing.structured, ing.extractedText ?? ing.title ?? ""),
+          sourceHint: buildSourceHint(ing),
+          extraNotes: [...(ing.notes ?? []), "ページに未記載の栄養はAI推定として補完します。"],
+          sourceOverride: nextSource,
+          baseDraft: ing.structured,
+          fallbackDraft: ing.structured,
+        });
+        return;
+      }
       setDraft(ing.structured);
       setPhase("confirm");
       return;
@@ -163,6 +181,8 @@ export function AddClient({
     sourceHint,
     extraNotes = [],
     sourceOverride,
+    baseDraft,
+    fallbackDraft,
   }: {
     text?: string;
     images?: File[];
@@ -170,12 +190,21 @@ export function AddClient({
     sourceHint?: string;
     extraNotes?: string[];
     sourceOverride?: SourceMeta;
+    baseDraft?: AiRecipe;
+    fallbackDraft?: AiRecipe;
   }) {
     setPhase("analyzing");
     setStatus(videos?.length ? "動画から使える場面を切り出しています..." : "AIがレシピを整理しています...");
     setErr(null);
 
     const frameFiles = videos?.length ? await extractVideoFrames(videos, Math.max(1, 8 - (images?.length ?? 0))) : [];
+    const imageCandidate = !mainImageUrl ? pickMainImageCandidate(images ?? [], frameFiles) : null;
+    if (imageCandidate) {
+      setStatus("料理画像を保存しています...");
+      const savedImageUrl = await saveMainImageCandidate(imageCandidate);
+      if (savedImageUrl) setMainImageUrl(savedImageUrl);
+    }
+
     const fd = new FormData();
     if (text) fd.append("text", text);
     if (sourceHint) fd.append("sourceHint", sourceHint);
@@ -185,6 +214,12 @@ export function AddClient({
     const res = await fetch("/api/ai/structure", { method: "POST", body: fd });
     const j = await res.json();
     if (!res.ok) {
+      if (fallbackDraft) {
+        setWarnings([...(j.warnings ?? []), ...extraNotes, "栄養のAI推定に失敗しました。確認画面で手入力できます。"]);
+        setDraft(fallbackDraft);
+        setPhase("confirm");
+        return;
+      }
       if (j.limitReached) {
         setErr("今月のAI解析上限に達しました。手動入力に切り替えます。");
         setDraft(EMPTY);
@@ -196,14 +231,15 @@ export function AddClient({
       return;
     }
 
+    const nextRecipe = baseDraft ? mergeNutritionEstimate(baseDraft, j.recipe) : j.recipe;
     const nextSource = {
       ...(sourceOverride ?? source),
       sourceRawText: mergeSourceText(sourceOverride?.sourceRawText ?? source?.sourceRawText, text),
-      aiEstimatedFields: j.aiEstimatedFields ?? j.recipe?.ai_estimated_fields ?? [],
-      analysisConfidence: j.analysisConfidence ?? j.recipe?.analysis_confidence ?? null,
+      aiEstimatedFields: nextRecipe.ai_estimated_fields ?? j.aiEstimatedFields ?? [],
+      analysisConfidence: nextRecipe.analysis_confidence ?? j.analysisConfidence ?? null,
     };
     setSource(nextSource);
-    setDraft(j.recipe);
+    setDraft(nextRecipe);
     setWarnings([...(j.warnings ?? []), ...extraNotes]);
     setPhase("confirm");
   }
@@ -457,6 +493,62 @@ function errorLabel(code?: IngestErrorCode | null): string {
 function shareErrorMessage(code: string): string | null {
   if (code === "instagram_url_missing") return SHARE_INSTAGRAM_URL_MISSING_MESSAGE;
   return null;
+}
+
+function pickMainImageCandidate(images: File[], frameFiles: File[]): File | null {
+  if (frameFiles.length) return frameFiles[Math.min(1, frameFiles.length - 1)];
+  return images.find((file) => file.type.startsWith("image/")) ?? null;
+}
+
+async function saveMainImageCandidate(file: File): Promise<string | null> {
+  try {
+    const blob = await imageFileToJpegBlob(file);
+    const sb = getBrowserSupabase();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return await blobToDataUrl(blob);
+
+    const path = `${user.id}/imports/${randomId()}.jpg`;
+    const { error } = await sb.storage
+      .from("recipe-images")
+      .upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    if (error) return await blobToDataUrl(blob);
+
+    const { data, error: signedError } = await sb.storage
+      .from("recipe-images")
+      .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+    if (signedError || !data?.signedUrl) return await blobToDataUrl(blob);
+    return data.signedUrl;
+  } catch {
+    return null;
+  }
+}
+
+async function imageFileToJpegBlob(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+    return blob ?? file;
+  } finally {
+    bitmap.close();
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
+}
+
+function randomId() {
+  return crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 async function extractVideoFrames(videoFiles: File[], maxFrames: number): Promise<File[]> {
