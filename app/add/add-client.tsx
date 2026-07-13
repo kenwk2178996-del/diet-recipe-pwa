@@ -13,9 +13,9 @@ import {
   mergeNutritionEstimate,
   needsNutritionEstimate,
 } from "@/lib/nutrition-estimate";
-import { AlertCircle, ExternalLink, Image as ImageIcon, Link2, PenLine, RefreshCw, Type, Video } from "lucide-react";
+import { AlertCircle, ExternalLink, Image as ImageIcon, Link2, PenLine, RefreshCw, Sparkles, Type, Video } from "lucide-react";
 
-type Tab = "url" | "text" | "image" | "manual";
+type Tab = "discover" | "url" | "text" | "image" | "manual";
 type Phase = "input" | "analyzing" | "confirm" | "needs-more" | "duplicate";
 
 const EMPTY: AiRecipe = {
@@ -71,6 +71,14 @@ interface IngestResponse {
   error?: string;
 }
 
+interface RecipeSearchCandidate {
+  title: string;
+  url: string;
+  site: string;
+  summary: string;
+  imageUrl: string | null;
+}
+
 export function AddClient({
   allTags,
   initialUrl,
@@ -84,7 +92,7 @@ export function AddClient({
   initialShareError?: string;
   fromShareTarget?: boolean;
 }) {
-  const [tab, setTab] = useState<Tab>(initialUrl ? "url" : initialText ? "text" : "url");
+  const [tab, setTab] = useState<Tab>(initialUrl ? "url" : initialText ? "text" : "discover");
   const [url, setUrl] = useState(initialUrl);
   const [text, setText] = useState(initialText);
   const [files, setFiles] = useState<File[]>([]);
@@ -99,6 +107,10 @@ export function AddClient({
   const [pendingIngest, setPendingIngest] = useState<IngestResponse | null>(null);
   const [updateRecipeId, setUpdateRecipeId] = useState<string | undefined>(undefined);
   const [duplicateAction, setDuplicateAction] = useState<"save_as_new" | undefined>(undefined);
+  const [discoverQuery, setDiscoverQuery] = useState("");
+  const [discoverCandidates, setDiscoverCandidates] = useState<RecipeSearchCandidate[]>([]);
+  const [discoverBusy, setDiscoverBusy] = useState(false);
+  const [discoverMessage, setDiscoverMessage] = useState<string | null>(null);
 
   useEffect(() => { if (initialUrl) analyzeUrl(initialUrl); /* eslint-disable-next-line */ }, []);
 
@@ -126,6 +138,30 @@ export function AddClient({
     } catch (e: any) {
       setErr(e.message);
       setPhase("input");
+    }
+  }
+
+  async function discoverRecipes() {
+    const query = discoverQuery.trim();
+    if (!query) return;
+    setDiscoverBusy(true);
+    setDiscoverMessage(null);
+    setErr(null);
+    try {
+      const res = await fetch("/api/discover/recipes", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || "候補検索に失敗しました");
+      setDiscoverCandidates(j.candidates ?? []);
+      setDiscoverMessage(j.message ?? null);
+    } catch (e: any) {
+      setDiscoverCandidates([]);
+      setDiscoverMessage(e.message);
+    } finally {
+      setDiscoverBusy(false);
     }
   }
 
@@ -299,7 +335,7 @@ export function AddClient({
     />
   );
 
-  const tabs: [Tab, string, any][] = [["url", "URL", Link2], ["text", "テキスト", Type], ["image", "スクショ", ImageIcon], ["manual", "手動", PenLine]];
+  const tabs: [Tab, string, any][] = [["discover", "AI探し", Sparkles], ["url", "URL", Link2], ["text", "テキスト", Type], ["image", "スクショ", ImageIcon], ["manual", "手動", PenLine]];
   return (
     <div className="space-y-4">
       <h1 className="text-lg font-bold">レシピを追加</h1>
@@ -316,6 +352,58 @@ export function AddClient({
           </button>
         ))}
       </div>
+
+      {tab === "discover" && (
+        <div className="space-y-3">
+          <Card className="space-y-3 p-4">
+            <div>
+              <h2 className="text-sm font-semibold">AIレシピ探し</h2>
+              <p className="mt-1 text-xs text-ink/60">保存済みではなく、公開されているレシピ候補を探して短く要約します。</p>
+            </div>
+            <Input
+              placeholder="例: 鶏むね 高タンパク 10分"
+              value={discoverQuery}
+              onChange={(e) => setDiscoverQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") discoverRecipes(); }}
+            />
+            <Button className="w-full" disabled={!discoverQuery.trim() || discoverBusy} onClick={discoverRecipes}>
+              {discoverBusy ? "候補を探しています..." : "候補を探す"}
+            </Button>
+          </Card>
+
+          {discoverMessage && (
+            <Card className="border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              {discoverMessage}
+            </Card>
+          )}
+
+          {discoverCandidates.length > 0 && (
+            <div className="space-y-2">
+              <p className="px-1 text-xs text-ink/50">候補は元ページの情報を短くまとめています。保存前に必ず確認画面で調整できます。</p>
+              {discoverCandidates.map((candidate) => (
+                <Card key={candidate.url} className="overflow-hidden">
+                  <div className="flex gap-3 p-3">
+                    <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-beige">
+                      {candidate.imageUrl && <img src={candidate.imageUrl} alt="" className="h-full w-full object-cover" loading="lazy" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] text-ink/45">{candidate.site}</p>
+                      <h3 className="line-clamp-2 text-sm font-semibold leading-snug">{candidate.title}</h3>
+                      <p className="mt-1 line-clamp-3 text-xs leading-relaxed text-ink/60">{candidate.summary}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 border-t border-beige text-xs">
+                    <button className="py-2 font-semibold text-sage-dark" onClick={() => analyzeUrl(candidate.url)}>この候補を解析</button>
+                    <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-1 py-2 text-ink/60">
+                      元ページ <ExternalLink size={13} />
+                    </a>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {tab === "url" && (
         <Card className="space-y-3 p-4">
